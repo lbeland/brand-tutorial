@@ -1,0 +1,54 @@
+# SIMULATOR
+mouse_vel:
+  index: int32
+firing_rates:
+  i: uint32
+  ts: uint64
+# BRAND
+# bin_multiple
+binned_spikes:
+  sync: sync
+  ts: uint64
+  samples: int8
+# normalize
+normalize_norm:
+  sync: sync
+  ts: uint64
+  samples: int8
+# auto_cue
+control:
+  ts: uint64
+  # i: uint64
+  samples: float32
+  sync: sync
+# decoder_smoothing
+cursor_vel:
+  sync: sync
+  ts: uint64
+  samples: float32
+# radialFSM
+targetData:
+  X: float32
+  Y: float32
+  height: float32
+  # i: uint32
+  state: int32
+  sync: sync
+  ts: uint64
+  width: float32
+cursorData:
+  X: float32
+  Y: float32
+  radius: float32
+  # i: str
+  state: int32
+  sync: sync
+  ts: uint64
+state:
+  ts: uint64
+  sync: sync
+  state: str
+trial_success:
+  ts: uint64
+  sync: sync
+  success: uint8
