@@ -47,14 +47,14 @@ else:
 print('Stopping graph')
 r.xadd('supervisor_ipstream', {'commands': 'stopGraph'})
 
-curs, stop_streams = r.scan(0, _type='stream')
-while curs != 0:
-    curs, streams = r.scan(curs, _type='stream')
-    stop_streams += streams
+# curs, stop_streams = r.scan(0, _type='stream')
+# while curs != 0:
+#     curs, streams = r.scan(curs, _type='stream')
+#     stop_streams += streams
 
-new_streams = [
-    stream for stream in stop_streams if stream not in start_streams
-]
+# new_streams = [
+#     stream for stream in stop_streams if stream not in start_streams
+# ]
 
-for stream in new_streams:
-    start_id[stream] = 0
+# for stream in new_streams:
+#     start_id[stream] = 0
