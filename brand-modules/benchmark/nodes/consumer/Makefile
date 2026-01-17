@@ -1,4 +1,4 @@
-PROJECT=second_node
+PROJECT=consumer
 
 # ifneq ($(CONDA_DEFAULT_ENV), rt)
 # $(error real-time conda env (rt) not active)

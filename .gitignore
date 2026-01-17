@@ -11,3 +11,5 @@ git_hash.o
 .ipynb_checkpoints/
 
 /rt
+
+*.csv

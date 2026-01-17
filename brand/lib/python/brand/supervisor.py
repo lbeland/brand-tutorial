@@ -188,15 +188,15 @@ class Supervisor:
             logger.info('redis-server is running')
         self.r = Redis(self.host,self.port,socket_connect_timeout=1)
 
-        # Set rdb save directory
-        if not os.path.exists(self.save_path_rdb):
-            os.makedirs(self.save_path_rdb)
-        self.r.config_set('dir', self.save_path_rdb)
-        logger.info(f"RDB save directory set to {self.save_path_rdb}")
-        # Set new rdb filename
-        self.rdb_filename =  'idle_' + datetime.now().strftime(r'%y%m%dT%H%M') + '.rdb'
-        self.r.config_set('dbfilename', self.rdb_filename)
-        logger.info(f"RDB file name set to {self.rdb_filename}")
+        # # Set rdb save directory
+        # if not os.path.exists(self.save_path_rdb):
+        #     os.makedirs(self.save_path_rdb)
+        # self.r.config_set('dir', self.save_path_rdb)
+        # logger.info(f"RDB save directory set to {self.save_path_rdb}")
+        # # Set new rdb filename
+        # self.rdb_filename =  'idle_' + datetime.now().strftime(r'%y%m%dT%H%M') + '.rdb'
+        # self.r.config_set('dbfilename', self.rdb_filename)
+        # logger.info(f"RDB file name set to {self.rdb_filename}")
 
 
     def get_save_path(self, graph_dict:dict={}):
@@ -260,21 +260,21 @@ class Supervisor:
         model["graph_name"] = self.graph_name
         model["graph_loaded_ts"] = time.monotonic_ns()
 
-        # Set rdb save directory
-        self.save_path = self.get_save_path(graph_dict)
-        self.save_path_rdb = os.path.join(self.save_path, 'RDB')
-        if not os.path.exists(self.save_path_rdb):
-            os.makedirs(self.save_path_rdb)
-        self.r.config_set('dir', self.save_path_rdb)
-        logger.info(f"RDB save directory set to {self.save_path_rdb}")
+        # # Set rdb save directory
+        # self.save_path = self.get_save_path(graph_dict)
+        # self.save_path_rdb = os.path.join(self.save_path, 'RDB')
+        # if not os.path.exists(self.save_path_rdb):
+        #     os.makedirs(self.save_path_rdb)
+        # self.r.config_set('dir', self.save_path_rdb)
+        # logger.info(f"RDB save directory set to {self.save_path_rdb}")
 
-        # Set rdb filename
-        if rdb_filename is None:
-            self.rdb_filename =  self.save_path.split(os.path.sep)[-3] + '_' + datetime.now().strftime(r'%y%m%dT%H%M') + '_' + self.graph_name + '.rdb'
-        else:
-            self.rdb_filename = rdb_filename
-        self.r.config_set('dbfilename', self.rdb_filename)
-        logger.info(f'rdb filename: {self.rdb_filename}')
+        # # Set rdb filename
+        # if rdb_filename is None:
+        #     self.rdb_filename =  self.save_path.split(os.path.sep)[-3] + '_' + datetime.now().strftime(r'%y%m%dT%H%M') + '_' + self.graph_name + '.rdb'
+        # else:
+        #     self.rdb_filename = rdb_filename
+        # self.r.config_set('dbfilename', self.rdb_filename)
+        # logger.info(f'rdb filename: {self.rdb_filename}')
 
         # Load node information
         model["nodes"] = {}

@@ -1,12 +1,12 @@
 graph_name: first_graph
 nodes:
-  - name:         first_node
+  - name:         producer
     nickname:     node_1
     module:       ../brand-modules/linda-test
     redis-inputs: []
     parameters:
       log: INFO
-  - name:         second_node
+  - name:         consumer
     nickname:     node_2
     module:       ../brand-modules/linda-test
     parameters:

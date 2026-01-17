@@ -1,4 +1,4 @@
-PROJECT=first_node
+PROJECT=producer
 
 # ifneq ($(CONDA_DEFAULT_ENV), rt)
 # $(error real-time conda env (rt) not active)
