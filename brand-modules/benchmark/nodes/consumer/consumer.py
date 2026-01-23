@@ -28,7 +28,7 @@ class Consumer(BRANDNode):
                 self.process_times.append(now - np.frombuffer(entry_dict[b'time'], dtype=np.float64)[0])
         self.counter += 1
 
-        if self.counter >= self.n_messages:
+        if self.counter >= self.n_messages + 1:
             self.terminate(None, None)
 
     def terminate(self, sig, frame):

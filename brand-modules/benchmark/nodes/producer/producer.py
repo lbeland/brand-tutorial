@@ -22,8 +22,13 @@ class Producer(BRANDNode):
 
     def run(self):
         try:
-            next_deadline = time.monotonic()
             default_data = np.ones((self.num_channels,self.msg_size), dtype=np.float64)
+
+            # Send one sample that is not counted to initialize the stream
+            self.sample['time'] = (default_data).tobytes()
+            self.r.xadd('random', self.sample, maxlen=None, approximate=True)
+
+            next_deadline = time.monotonic()
 
             for i in range(self.n_messages):
                 while True:
@@ -40,12 +45,12 @@ class Producer(BRANDNode):
 
     def terminate(self, sig, frame):
         print(f"Total messages sent: {len(self.send_times)}")
-        send_times = self.send_times[1:]
-        send_times_diff = np.diff(send_times)
+        # send_times = self.send_times[1:]
+        send_times_diff = np.diff(self.send_times)
         print(f"Average send period (s): {np.mean(send_times_diff):.6f}")
         print(f"Max send period (s): {np.max(send_times_diff):.6f}, idx: {np.argmax(send_times_diff)}")
         print(f"Std send period (s): {np.std(send_times_diff):.6f}")
-        save = np.vstack((send_times, np.append(send_times_diff, 0)))
+        save = np.vstack((self.send_times, np.append(send_times_diff, 0)))
         np.savetxt(self.output_file, save.T, delimiter=',', header='send_time,send_period')
         print("Producer stopped.")
 

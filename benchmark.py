@@ -12,8 +12,6 @@ def start_graph(args):
     REDIS_IP = '127.0.0.1'
     REDIS_PORT = 6379
 
-    os.makedirs("results", exist_ok=True)
-
     # Define graph structure directly in Python
     graph = {
         'graph_name': 'first_graph',
@@ -93,10 +91,13 @@ def main():
     args = parser.parse_args()
 
     os.makedirs("results", exist_ok=True)
+
+    if os.path.exists(f"results/{args.freq}_{args.msg_size}_{args.num_channels}_send_times.csv"):
+        return  # Skip if already exists
     
     # Set up environment with venv binaries in PATH
     env = os.environ.copy()
-    env['PATH'] = f"/home/linda/brand-tutorial/brand/bin:{env.get('PATH', '')}"
+    env['PATH'] = f"/home/linda/Documents/Benchmark_IPC/brand-tutorial/brand/bin:{env.get('PATH', '')}"
     
     # 1. Start supervisor with venv activated
     supervisor_cmd = """
