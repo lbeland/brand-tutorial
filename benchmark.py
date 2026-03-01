@@ -19,7 +19,7 @@ def start_graph(args):
         'graph_name': 'first_graph',
         'nodes': [
             {
-                'name': 'producer',
+                'name': 'c-producer',
                 'nickname': 'node_1',
                 'module': '../brand-modules/benchmark',
                 'redis-inputs': [],
@@ -33,7 +33,7 @@ def start_graph(args):
                 }
             },
             {
-                'name': 'consumer',
+                'name': 'c-consumer',
                 'nickname': 'node_2',
                 'module': '../brand-modules/benchmark',
                 'parameters': {
