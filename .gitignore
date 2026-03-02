@@ -13,3 +13,5 @@ git_hash.o
 /rt
 
 *.csv
+
+*.bin
