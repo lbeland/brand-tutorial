@@ -80,7 +80,7 @@ void produce_messages(producer_parameters_t *params) {
                 break;
             }
             // Sleep for a small amount to avoid busy waiting
-            usleep(1);
+            // usleep(1);
         }
     }
 }

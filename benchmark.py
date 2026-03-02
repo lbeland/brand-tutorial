@@ -93,6 +93,9 @@ def main():
     args = parser.parse_args()
 
     os.makedirs("results", exist_ok=True)
+
+    if os.path.exists(f"results/{args.freq}_{args.msg_size}_{args.num_channels}_send_times.csv"):
+        return
     
     # Set up environment with venv binaries in PATH
     env = os.environ.copy()
