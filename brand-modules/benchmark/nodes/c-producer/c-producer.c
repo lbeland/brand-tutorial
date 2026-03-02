@@ -14,7 +14,6 @@
 
 typedef struct {
     int n_messages;
-    int freq;
     int msg_size;
     int num_channels;
     char output_file[MAX_OUTPUT_FILE];
@@ -45,51 +44,76 @@ double get_current_time() {
     return ts.tv_sec + ts.tv_nsec / 1e9;
 }
 
-// Produce messages at specified frequency
+// Produce messages as fast as possible
 void produce_messages(producer_parameters_t *params) {
-    double period_s = 1.0 / params->freq;
-    double next_deadline = get_current_time();
+    int message_size = params->num_channels * params->msg_size * sizeof(double);
+    double *message_data = (double *)malloc(message_size);
     
-    for (int i = 0; i < params->n_messages && !flag_SIGINT; i++) {
-        // Busy-wait until next deadline
-        while (1) {
-            double now = get_current_time();
-            if (now >= next_deadline) {
-                // Create message with timestamp
-                double send_time = now;
-                char time_buffer[sizeof(double)];
-                memcpy(time_buffer, &send_time, sizeof(double));
-                
-                // Send to Redis stream
-                redisReply *xadd_reply = (redisReply *)redisCommand(redis_context,
-                    "XADD random * time %b",
-                    time_buffer, sizeof(double));
-                
-                if (xadd_reply != NULL) {
-                    freeReplyObject(xadd_reply);
-                } else {
-                    fprintf(stderr, "[%s] Error sending to Redis\n", NICKNAME);
-                    break;
-                }
-                
-                if (g_counter < MAX_MESSAGES) {
-                    send_times[g_counter].send_time = send_time;
-                }
-                g_counter++;
-                next_deadline += period_s;
-                break;
-            }
-            // Sleep for a small amount to avoid busy waiting
-            // usleep(1);
+    if (!message_data) {
+        fprintf(stderr, "[%s] Memory allocation failed\n", NICKNAME);
+        return;
+    }
+    
+    // Fill with default data (ones)
+    for (int i = 0; i < params->num_channels * params->msg_size; i++) {
+        message_data[i] = 1.0;
+    }
+    
+    // Warmup loop to stabilize the stream before measurements
+    for (int i = 0; i < 500 && !flag_SIGINT; i++) {
+        double now = get_current_time();
+        // Fill message with current timestamp
+        for (int j = 0; j < params->num_channels * params->msg_size; j++) {
+            message_data[j] = now;
+        }
+        
+        // Send to Redis stream
+        redisReply *xadd_reply = (redisReply *)redisCommand(redis_context,
+            "XADD random * time %b",
+            message_data, message_size);
+        
+        if (xadd_reply != NULL) {
+            freeReplyObject(xadd_reply);
+        } else {
+            fprintf(stderr, "[%s] Error sending to Redis\n", NICKNAME);
+            break;
         }
     }
+    
+    // Send measured messages
+    for (int i = 0; i < params->n_messages && !flag_SIGINT; i++) {
+        double now = get_current_time();
+        // Fill message with current timestamp
+        for (int j = 0; j < params->num_channels * params->msg_size; j++) {
+            message_data[j] = now;
+        }
+        
+        // Send to Redis stream
+        redisReply *xadd_reply = (redisReply *)redisCommand(redis_context,
+            "XADD random * time %b",
+            message_data, message_size);
+        
+        if (xadd_reply != NULL) {
+            freeReplyObject(xadd_reply);
+        } else {
+            fprintf(stderr, "[%s] Error sending to Redis\n", NICKNAME);
+            break;
+        }
+        
+        if (g_counter < MAX_MESSAGES) {
+            send_times[g_counter].send_time = now;
+        }
+        g_counter++;
+    }
+    
+    free(message_data);
 }
 
 // Save results to file and print statistics
 void terminate(producer_parameters_t *producer_params) {
     printf("Total messages sent: %d\n", g_counter);
     
-    // Calculate statistics (excluding first measurement)
+    // Calculate statistics
     if (g_counter > 1) {
         double sum = 0.0, max_val = 0.0, sum_sq = 0.0;
         int max_idx = 0;
@@ -107,36 +131,33 @@ void terminate(producer_parameters_t *producer_params) {
         }
         
         if (count > 0) {
-            double mean = sum / count;
-            double variance = (sum_sq / count) - (mean * mean);
-            double stddev = sqrt(variance < 0 ? 0 : variance);
+            double mean_sec = sum / count;
+            double variance = (sum_sq / count) - (mean_sec * mean_sec);
+            double stddev_sec = sqrt(variance < 0 ? 0 : variance);
             
-            printf("Average send period (s): %.6f\n", mean);
-            printf("Max send period (s): %.6f, idx: %d\n", max_val, max_idx);
-            printf("Std send period (s): %.6f\n", stddev);
-        }
-    }
-    
-    // Save results to file
-    if (strlen(producer_params->output_file) > 0) {
-        FILE *outfile = fopen(producer_params->output_file, "w");
-        if (outfile != NULL) {
-            fprintf(outfile, "send_time,send_period\n");
+            // Convert to microseconds
+            double mean_us = mean_sec * 1e6;
+            double stddev_us = stddev_sec * 1e6;
+            double max_us = max_val * 1e6;
             
-            for (int i = 0; i < g_counter; i++) {
-                fprintf(outfile, "%.9f,", send_times[i].send_time);
-                if (i > 0) {
-                    fprintf(outfile, "%.9f", send_times[i].send_time - send_times[i-1].send_time);
+            printf("Average send period (us): %.4f\n", mean_us);
+            printf("Max send period (us): %.4f, idx: %d\n", max_us, max_idx);
+            printf("Std send period (us): %.4f\n", stddev_us);
+            
+            // Save results to CSV file in same format as zeromq
+            if (strlen(producer_params->output_file) > 0) {
+                FILE *outfile = fopen(producer_params->output_file, "w");
+                if (outfile != NULL) {
+                    fprintf(outfile, "Metric,Send_period\n");
+                    fprintf(outfile, "mean,%.6f\n", mean_us);
+                    fprintf(outfile, "std,%.6f\n", stddev_us);
+                    fprintf(outfile, "max,%.6f\n", max_us);
+                    fclose(outfile);
+                    printf("Results saved to: %s\n", producer_params->output_file);
+                } else {
+                    printf("Error: Could not open output file: %s\n", producer_params->output_file);
                 }
-                else {
-                    fprintf(outfile, "0.0");
-                }
-                fprintf(outfile, "\n");
             }
-            fclose(outfile);
-            printf("Results saved to: %s\n", producer_params->output_file);
-        } else {
-            printf("Error: Could not open output file: %s\n", producer_params->output_file);
         }
     }
     
@@ -167,20 +188,18 @@ void initialize_parameters(producer_parameters_t *p, redisContext *c) {
     
     // Get parameters from supergraph
     p->n_messages = get_parameter_int(supergraph_json, NICKNAME, "n_messages");
-    p->freq = get_parameter_int(supergraph_json, NICKNAME, "freq");
     p->msg_size = get_parameter_int(supergraph_json, NICKNAME, "msg_size");
     p->num_channels = get_parameter_int(supergraph_json, NICKNAME, "num_channels");
     strcpy(p->output_file, get_parameter_string(supergraph_json, NICKNAME, "output_file"));
     
     printf("[%s] Parameters have been loaded.\n", NICKNAME);
     printf("[%s] n_messages: %d\n", NICKNAME, p->n_messages);
-    printf("[%s] freq: %d\n", NICKNAME, p->freq);
     printf("[%s] msg_size: %d\n", NICKNAME, p->msg_size);
     printf("[%s] num_channels: %d\n", NICKNAME, p->num_channels);
     printf("[%s] output_file: %s\n", NICKNAME, p->output_file);
     
-    if (p->n_messages <= 0 || p->freq <= 0) {
-        emit_status(c, NICKNAME, NODE_FATAL_ERROR, "Invalid parameters: n_messages and freq must be positive");
+    if (p->n_messages <= 0) {
+        emit_status(c, NICKNAME, NODE_FATAL_ERROR, "Invalid parameters: n_messages must be positive");
         redisFree(c);
         exit(1);
     }

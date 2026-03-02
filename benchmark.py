@@ -24,10 +24,9 @@ def start_graph(args):
                 'parameters': {
                     'log': 'INFO',
                     'n_messages': args.n_messages,
-                    'freq': args.freq,
                     'msg_size': args.msg_size,
                     'num_channels': args.num_channels,
-                    'output_file': f"../results/{args.freq}_{args.msg_size}_{args.num_channels}_send_times.csv"
+                    'output_file': f"../results/{args.msg_size}_{args.num_channels}_send_times.csv"
                 }
             },
             {
@@ -37,7 +36,7 @@ def start_graph(args):
                 'parameters': {
                     'log': 'INFO',
                     'n_messages': args.n_messages,
-                    'output_file': f"../results/{args.freq}_{args.msg_size}_{args.num_channels}_recv_times.csv"
+                    'output_file': f"../results/{args.msg_size}_{args.num_channels}_recv_times.csv"
                 }
             }
         ]
@@ -46,7 +45,7 @@ def start_graph(args):
     r = redis.Redis(host=REDIS_IP, port=REDIS_PORT)
 
     print(f'Starting graph: {graph["graph_name"]}')
-    print(f'Parameters: n_messages={args.n_messages}, freq={args.freq}, msg_size={args.msg_size}, num_channels={args.num_channels}')
+    print(f'Parameters: n_messages={args.n_messages}, msg_size={args.msg_size}, num_channels={args.num_channels}')
     r.xadd('supervisor_ipstream', {
         'commands': 'startGraph',
         'graph': json.dumps(graph)
@@ -55,7 +54,7 @@ def start_graph(args):
     # Wait for both producer and consumer to signal completion
     print('Waiting for test to complete...')
     # Calculate timeout based on expected runtime
-    expected_runtime = (args.n_messages / args.freq) + 10
+    expected_runtime = 10
     
     last_id = '0-0'
     consumer_done = False
@@ -92,8 +91,8 @@ def main():
 
     os.makedirs("results", exist_ok=True)
 
-    if os.path.exists(f"results/{args.freq}_{args.msg_size}_{args.num_channels}_send_times.csv"):
-        return  # Skip if already exists
+    # if os.path.exists(f"results/{args.msg_size}_{args.num_channels}_send_times.csv"):
+    #     return  # Skip if already exists
     
     # Set up environment with venv binaries in PATH
     env = os.environ.copy()

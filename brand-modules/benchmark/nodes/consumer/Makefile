@@ -10,10 +10,15 @@ include $(ROOT)/setenv.mk
 PYTHON_VERSION=3.8 # This works for rt env
 PYTHON_LIB=python$(PYTHON_VERSION)
 
+# Use VIRTUAL_ENV if set, otherwise fall back to /usr
+CONDA_PREFIX?=$(VIRTUAL_ENV)
+ifeq ($(CONDA_PREFIX),)
 CONDA_PREFIX=/usr
+endif
 
 LIBPYTHON=$(CONDA_PREFIX)/lib/ 
-INCPYTHON=$(CONDA_PREFIX)/include/$(PYTHON_LIB)
+# Always use system headers (virtual envs don't have headers)
+INCPYTHON=/usr/include/$(PYTHON_LIB)
 
 TARGET=$(PROJECT).bin
 CYTHON_TARGET=$(GENERATED_PATH)/$(PROJECT).c

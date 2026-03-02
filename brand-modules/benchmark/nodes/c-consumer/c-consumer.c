@@ -24,6 +24,7 @@ int g_counter = 0;
 int flag_SIGINT = 0;
 
 message_data_t messages[MAX_MESSAGES];
+double first_timestamp = 0.0;
 
 void initialize_signals();
 void handler_SIGINT(int exitStatus);
@@ -45,7 +46,39 @@ double get_current_time() {
 void consume_messages(graph_parameters_t *graph_parameters) {
     char last_id[50] = "0-0";
     int n_messages = graph_parameters->n_messages;
+    int warmup_counter = 0;
     
+    // Warmup phase: receive 500 samples before measurements
+    while (warmup_counter < 500 && !flag_SIGINT) {
+        // Read from Redis stream
+        redisReply *xread_reply = (redisReply *)redisCommand(redis_context, 
+            "XREAD COUNT 1 BLOCK 0 STREAMS random %s", last_id);
+        
+        if (xread_reply != NULL) {
+            if (xread_reply->type == REDIS_REPLY_ARRAY && xread_reply->elements > 0) {
+                redisReply *stream_data = xread_reply->element[0];
+                if (stream_data->elements >= 2) {
+                    redisReply *entries = stream_data->element[1];
+                    
+                    for (size_t i = 0; i < entries->elements; i++) {
+                        redisReply *entry = entries->element[i];
+                        
+                        if (entry->elements >= 2) {
+                            // Get entry ID
+                            redisReply *entry_id = entry->element[0];
+                            if (entry_id->type == REDIS_REPLY_STRING) {
+                                strcpy(last_id, entry_id->str);
+                            }
+                            warmup_counter++;
+                        }
+                    }
+                }
+            }
+            freeReplyObject(xread_reply);
+        }
+    }
+    
+    // Measurement phase
     while (g_counter < n_messages && !flag_SIGINT) {
         double now = get_current_time();
         
@@ -80,9 +113,13 @@ void consume_messages(graph_parameters_t *graph_parameters) {
                                         if (j + 1 < entry_dict->elements &&
                                             entry_dict->element[j + 1]->type == REDIS_REPLY_STRING) {
                                             
-                                            // Extract time from the bytes
+                                            // Extract time from the bytes (first double)
                                             const char *time_data = entry_dict->element[j + 1]->str;
                                             double send_time = *(double *)time_data;
+                                            
+                                            if (g_counter == 0) {
+                                                first_timestamp = send_time;
+                                            }
                                             
                                             if (g_counter < MAX_MESSAGES) {
                                                 messages[g_counter].recv_time = now;
@@ -109,53 +146,74 @@ void terminate(graph_parameters_t *graph_parameters) {
     printf("Total messages processed: %d\n", g_counter);
     
     if (g_counter > 1) {
-        // Calculate statistics (excluding first measurement)
-        double sum = 0.0, max_val = 0.0, sum_sq = 0.0;
+        // Calculate receive period statistics
+        double sum_diff = 0.0, max_diff = 0.0, sum_sq_diff = 0.0;
         int max_idx = 0;
         int count = 0;
         
         for (int i = 1; i < g_counter; i++) {
             double period = messages[i].recv_time - messages[i-1].recv_time;
-            sum += period;
-            sum_sq += period * period;
-            if (period > max_val) {
-                max_val = period;
+            sum_diff += period;
+            sum_sq_diff += period * period;
+            if (period > max_diff) {
+                max_diff = period;
                 max_idx = i;
             }
             count++;
         }
         
-        if (count > 0) {
-            double mean = sum / count;
-            double variance = (sum_sq / count) - (mean * mean);
-            double stddev = sqrt(variance < 0 ? 0 : variance);
-            
-            printf("Average receive period (s): %.6f\n", mean);
-            printf("Max receive period (s): %.6f, idx: %d\n", max_val, max_idx);
-            printf("Std receive period (s): %.6f\n", stddev);
-        }
-    }
-    
-    // Save results to file
-    if (strlen(graph_parameters->output_file) > 0) {
-        FILE *outfile = fopen(graph_parameters->output_file, "w");
-        if (outfile != NULL) {
-            fprintf(outfile, "recv_time,latency,recv_period\n");
-            
-            for (int i = 0; i < g_counter; i++) {
-                fprintf(outfile, "%.9f,%.9f,", messages[i].recv_time, messages[i].latency);
-                if (i > 0) {
-                    fprintf(outfile, "%.9f", messages[i].recv_time - messages[i-1].recv_time);
-                }
-                else {
-                    fprintf(outfile, "%.9f", 0.0);
-                }
-                fprintf(outfile, "\n");
+        double avg_period_sec = sum_diff / count;
+        double variance_period = (sum_sq_diff / count) - (avg_period_sec * avg_period_sec);
+        double stddev_period_sec = sqrt(variance_period < 0 ? 0 : variance_period);
+        
+        // Convert to microseconds
+        double avg_period_us = avg_period_sec * 1e6;
+        double stddev_period_us = stddev_period_sec * 1e6;
+        double max_period_us = max_diff * 1e6;
+        
+        printf("Average receive period (us): %.6f\n", avg_period_us);
+        printf("Max receive period (us): %.6f, idx: %d\n", max_period_us, max_idx);
+        printf("Std receive period (us): %.6f\n", stddev_period_us);
+        
+        // Calculate latency statistics
+        double sum_latency = 0.0, max_latency = 0.0, sum_sq_latency = 0.0;
+        int max_latency_idx = 0;
+        
+        for (int i = 0; i < g_counter; i++) {
+            sum_latency += messages[i].latency;
+            sum_sq_latency += messages[i].latency * messages[i].latency;
+            if (messages[i].latency > max_latency) {
+                max_latency = messages[i].latency;
+                max_latency_idx = i;
             }
-            fclose(outfile);
-            printf("Results saved to: %s\n", graph_parameters->output_file);
-        } else {
-            printf("Error: Could not open output file: %s\n", graph_parameters->output_file);
+        }
+        
+        double avg_latency_sec = sum_latency / g_counter;
+        double variance_latency = (sum_sq_latency / g_counter) - (avg_latency_sec * avg_latency_sec);
+        double stddev_latency_sec = sqrt(variance_latency < 0 ? 0 : variance_latency);
+        
+        // Convert to microseconds
+        double avg_latency_us = avg_latency_sec * 1e6;
+        double stddev_latency_us = stddev_latency_sec * 1e6;
+        double max_latency_us = max_latency * 1e6;
+        
+        // Calculate throughput
+        double throughput = g_counter / (messages[g_counter-1].recv_time - first_timestamp) / 1e3;
+        printf("Throughput (msg/ms): %.2f\n", throughput);
+        
+        // Save results to CSV file in same format as zeromq
+        if (strlen(graph_parameters->output_file) > 0) {
+            FILE *outfile = fopen(graph_parameters->output_file, "w");
+            if (outfile != NULL) {
+                fprintf(outfile, "Metric,Recv_period, Latency, Throughput\n");
+                fprintf(outfile, "mean,%.6f, %.6f, %.6f\n", avg_period_us, avg_latency_us, throughput);
+                fprintf(outfile, "std,%.6f, %.6f, \n", stddev_period_us, stddev_latency_us);
+                fprintf(outfile, "max,%.6f, %.6f, \n", max_period_us, max_latency_us);
+                fclose(outfile);
+                printf("Results saved to: %s\n", graph_parameters->output_file);
+            } else {
+                printf("Error: Could not open output file: %s\n", graph_parameters->output_file);
+            }
         }
     }
     

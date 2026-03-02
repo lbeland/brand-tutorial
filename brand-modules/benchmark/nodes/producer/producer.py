@@ -1,21 +1,29 @@
 import gc
-import numpy as np
 import sys
+import os
+
+# Add virtual environment site-packages to sys.path if VIRTUAL_ENV is set
+if 'VIRTUAL_ENV' in os.environ:
+    venv_path = os.environ['VIRTUAL_ENV']
+    site_packages = os.path.join(venv_path, 'lib', 'python3.8', 'site-packages')
+    if site_packages not in sys.path:
+        sys.path.insert(0, site_packages)
+
+import numpy as np
 import logging
 import time
+import pandas as pd
 from brand import BRANDNode
 
 class Producer(BRANDNode):
     def __init__(self):
         super().__init__()
         self.n_messages =  self.parameters["n_messages"]
-        self.freq = self.parameters["freq"]
         self.msg_size = self.parameters["msg_size"]
         self.num_channels = self.parameters["num_channels"]
         self.output_file = self.parameters["output_file"]
         
         self.send_times = []
-        self.PERIOD_S = 1/self.freq
         self.sample = {
             'time': 0.0,
         }
@@ -24,34 +32,36 @@ class Producer(BRANDNode):
         try:
             default_data = np.ones((self.num_channels,self.msg_size), dtype=np.float64)
 
-            # Send one sample that is not counted to initialize the stream
-            self.sample['time'] = (default_data).tobytes()
-            self.r.xadd('random', self.sample, maxlen=None, approximate=True)
-
-            next_deadline = time.monotonic()
+            # warmup loop to stabilize the stream before measurements
+            counter = 0
+            for i in range(500):
+                now = time.monotonic()
+                self.sample['time'] = (default_data * now).tobytes()
+                self.r.xadd('random', self.sample, maxlen=None, approximate=True)
+                counter += 1
 
             for i in range(self.n_messages):
-                while True:
-                    now = time.monotonic()
-                    if now >= next_deadline:
-                        self.sample['time'] = (default_data * now).tobytes()
-                        # print(data)
-                        self.r.xadd('random', self.sample, maxlen=None, approximate=True)
-                        self.send_times.append(now)
-                        next_deadline += self.PERIOD_S
-                        break
+                now = time.monotonic()
+                data = default_data * now
+                self.sample['time'] = data.tobytes()
+                self.r.xadd('random', self.sample, maxlen=None, approximate=True)
+                self.send_times.append(now)
         finally:   
             self.terminate(None, None)
 
     def terminate(self, sig, frame):
         print(f"Total messages sent: {len(self.send_times)}")
-        # send_times = self.send_times[1:]
+
         send_times_diff = np.diff(self.send_times)
-        print(f"Average send period (s): {np.mean(send_times_diff):.6f}")
-        print(f"Max send period (s): {np.max(send_times_diff):.6f}, idx: {np.argmax(send_times_diff)}")
-        print(f"Std send period (s): {np.std(send_times_diff):.6f}")
-        save = np.vstack((self.send_times, np.append(send_times_diff, 0)))
-        np.savetxt(self.output_file, save.T, delimiter=',', header='send_time,send_period')
+        mean_send_period = np.mean(send_times_diff)*1e6
+        std_send_period = np.std(send_times_diff)*1e6
+        max_send_period = np.max(send_times_diff)*1e6
+        print(f"Average send period (us): {mean_send_period:.4f}")
+        print(f"Max send period (us): {max_send_period:.4f}, idx: {np.argmax(send_times_diff)}")
+        print(f"Std send period (us): {std_send_period:.4f}")
+
+        results = pd.DataFrame({"Metric":["mean", "std", "max"],"Send_period": [mean_send_period, std_send_period, max_send_period]})
+        results.to_csv(self.output_file, index=False)
         print("Producer stopped.")
 
 
