@@ -39,6 +39,7 @@ class Consumer(BRANDNode):
                 # Warmup phase: receive 500 samples before measurements
                 if self.warmup_counter < 500:
                     self.warmup_counter += 1
+                    self.r.xdel('random', entry_id)
                     continue
                 
                 timestamp = np.frombuffer(entry_dict[b'time'], dtype=np.float64)[0]
@@ -47,6 +48,7 @@ class Consumer(BRANDNode):
                 self.recv_times.append(now)
                 self.process_times.append(now - timestamp)
                 self.counter += 1
+                self.r.xdel('random', entry_id)
 
         if self.counter >= self.n_messages:
             self.terminate(None, None)

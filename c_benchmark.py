@@ -28,6 +28,7 @@ def start_graph(args, results_folder="c_results"):
                     'n_messages': args.n_messages,
                     'msg_size': args.msg_size,
                     'num_channels': args.num_channels,
+                    'max_buffer_size': args.max_buffer_size,
                     'output_file': f"../{results_folder}/{args.msg_size}_{args.num_channels}_Producer.csv"
                 }
             },
@@ -47,7 +48,7 @@ def start_graph(args, results_folder="c_results"):
     r = redis.Redis(host=REDIS_IP, port=REDIS_PORT)
 
     print(f'Starting graph: {graph["graph_name"]}')
-    print(f'Parameters: n_messages={args.n_messages}, msg_size={args.msg_size}, num_channels={args.num_channels}')
+    print(f'Parameters: n_messages={args.n_messages}, msg_size={args.msg_size}, num_channels={args.num_channels}, max_buffer_size={args.max_buffer_size}')
     r.xadd('supervisor_ipstream', {
         'commands': 'startGraph',
         'graph': json.dumps(graph)
@@ -69,7 +70,6 @@ def start_graph(args, results_folder="c_results"):
                 for entry_id, entry_dict in entries:
                     if entry_dict.get(b'consumer') == b'done':
                         consumer_done = True
-                        print("Consumer completed")
                     last_id = entry_id
         else:
             # Timeout - no message received
@@ -87,6 +87,7 @@ def main():
     parser.add_argument("--n_messages", type=int, default=1000)
     parser.add_argument("--msg_size", type=int, default=1)
     parser.add_argument("--num_channels", type=int, default=1)
+    parser.add_argument("--max_buffer_size", type=int, default=10)
     parser.add_argument("--output_file", type=str, default="Producer.csv")
     args = parser.parse_args()
 

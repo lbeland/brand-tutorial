@@ -16,6 +16,7 @@ typedef struct {
     int n_messages;
     int msg_size;
     int num_channels;
+    int max_buffer_size;
     char output_file[MAX_OUTPUT_FILE];
 } producer_parameters_t;
 
@@ -44,6 +45,27 @@ double get_current_time() {
     return ts.tv_sec + ts.tv_nsec / 1e9;
 }
 
+// Busy-wait until there is room in the stream buffer
+void wait_for_buffer_slot(int max_buffer_size) {
+    while (!flag_SIGINT) {
+        redisReply *xlen_reply = (redisReply *)redisCommand(redis_context, "XLEN random");
+        if (xlen_reply == NULL) {
+            continue;
+        }
+
+        int has_slot = 0;
+        if (xlen_reply->type == REDIS_REPLY_INTEGER) {
+            has_slot = (xlen_reply->integer < max_buffer_size);
+        }
+
+        freeReplyObject(xlen_reply);
+
+        if (has_slot) {
+            break;
+        }
+    }
+}
+
 // Produce messages as fast as possible
 void produce_messages(producer_parameters_t *params) {
     int message_size = params->num_channels * params->msg_size * sizeof(double);
@@ -61,6 +83,7 @@ void produce_messages(producer_parameters_t *params) {
     
     // Warmup loop to stabilize the stream before measurements
     for (int i = 0; i < 500 && !flag_SIGINT; i++) {
+        wait_for_buffer_slot(params->max_buffer_size);
         double now = get_current_time();
         // Fill message with current timestamp
         for (int j = 0; j < params->num_channels * params->msg_size; j++) {
@@ -82,6 +105,7 @@ void produce_messages(producer_parameters_t *params) {
     
     // Send measured messages
     for (int i = 0; i < params->n_messages && !flag_SIGINT; i++) {
+        wait_for_buffer_slot(params->max_buffer_size);
         double now = get_current_time();
         // Fill message with current timestamp
         for (int j = 0; j < params->num_channels * params->msg_size; j++) {
@@ -187,6 +211,7 @@ void initialize_parameters(producer_parameters_t *p, redisContext *c) {
     p->n_messages = get_parameter_int(supergraph_json, NICKNAME, "n_messages");
     p->msg_size = get_parameter_int(supergraph_json, NICKNAME, "msg_size");
     p->num_channels = get_parameter_int(supergraph_json, NICKNAME, "num_channels");
+    p->max_buffer_size = get_parameter_int(supergraph_json, NICKNAME, "max_buffer_size");
     strcpy(p->output_file, get_parameter_string(supergraph_json, NICKNAME, "output_file"));
     
     if (p->n_messages <= 0) {

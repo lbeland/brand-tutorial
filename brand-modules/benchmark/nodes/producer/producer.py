@@ -22,11 +22,16 @@ class Producer(BRANDNode):
         self.msg_size = self.parameters["msg_size"]
         self.num_channels = self.parameters["num_channels"]
         self.output_file = self.parameters["output_file"]
+        self.max_buffer_size = self.parameters.get("max_buffer_size", 10)
         
         self.send_times = []
         self.sample = {
             'time': 0.0,
         }
+
+    def _wait_for_buffer_slot(self):
+        while self.r.xlen('random') >= self.max_buffer_size:
+            pass
 
     def run(self):
         try:
@@ -35,12 +40,14 @@ class Producer(BRANDNode):
             # warmup loop to stabilize the stream before measurements
             counter = 0
             for i in range(500):
+                self._wait_for_buffer_slot()
                 now = time.monotonic()
                 self.sample['time'] = (default_data * now).tobytes()
                 self.r.xadd('random', self.sample, maxlen=None, approximate=True)
                 counter += 1
 
             for i in range(self.n_messages):
+                self._wait_for_buffer_slot()
                 now = time.monotonic()
                 data = default_data * now
                 self.sample['time'] = data.tobytes()

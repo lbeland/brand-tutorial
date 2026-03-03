@@ -67,8 +67,8 @@ static int extract_send_time_from_entry(redisReply *entry, double *send_time) {
     return 0;
 }
 
-// Helper: Read one batch of messages from Redis stream
-static int read_from_redis_stream(char *last_id, double *send_time) {
+// Helper: Read one message from Redis stream
+static int read_from_redis_stream(char *last_id, char *entry_id_out, double *send_time) {
     redisReply *xread_reply = (redisReply *)redisCommand(redis_context, 
         "XREAD COUNT 1 BLOCK 0 STREAMS random %s", last_id);
     
@@ -84,6 +84,7 @@ static int read_from_redis_stream(char *last_id, double *send_time) {
                 
                 // Update last_id
                 if (entry->elements >= 1 && entry->element[0]->type == REDIS_REPLY_STRING) {
+                    strcpy(entry_id_out, entry->element[0]->str);
                     strcpy(last_id, entry->element[0]->str);
                 }
                 
@@ -100,6 +101,7 @@ static int read_from_redis_stream(char *last_id, double *send_time) {
 // Main consume loop
 void consume_messages(graph_parameters_t *graph_parameters) {
     char last_id[50] = "0-0";
+    char entry_id[50] = "0-0";
     int n_messages = graph_parameters->n_messages;
     const int WARMUP_SAMPLES = 500;
     int warmup_count = 0;
@@ -108,8 +110,13 @@ void consume_messages(graph_parameters_t *graph_parameters) {
     while (warmup_count < WARMUP_SAMPLES && !flag_SIGINT) {
         double send_time = 0.0;
 
-        if (!read_from_redis_stream(last_id, &send_time)) {
+        if (!read_from_redis_stream(last_id, entry_id, &send_time)) {
             continue;  // No message received, try again
+        }
+
+        redisReply *xdel_reply = (redisReply *)redisCommand(redis_context, "XDEL random %s", entry_id);
+        if (xdel_reply != NULL) {
+            freeReplyObject(xdel_reply);
         }
 
         warmup_count++;
@@ -120,7 +127,7 @@ void consume_messages(graph_parameters_t *graph_parameters) {
     while (g_counter < n_messages && !flag_SIGINT) {
         double send_time = 0.0;
 
-        if (!read_from_redis_stream(last_id, &send_time)) {
+        if (!read_from_redis_stream(last_id, entry_id, &send_time)) {
             continue;  // No message received, try again
         }
 
@@ -133,6 +140,11 @@ void consume_messages(graph_parameters_t *graph_parameters) {
         if (g_counter < MAX_MESSAGES) {
             messages[g_counter].recv_time = now;
             messages[g_counter].latency = now - send_time;
+        }
+
+        redisReply *xdel_reply = (redisReply *)redisCommand(redis_context, "XDEL random %s", entry_id);
+        if (xdel_reply != NULL) {
+            freeReplyObject(xdel_reply);
         }
 
         g_counter++;
