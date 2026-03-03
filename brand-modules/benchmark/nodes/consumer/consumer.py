@@ -29,7 +29,7 @@ class Consumer(BRANDNode):
 
     def work(self):
         
-        self.streams = self.r.xread(streams={'random':self.last_id}, count=1, block=0) # reads up to 5 entries if available, else blocks
+        self.streams = self.r.xread(streams={'random':self.last_id}, count=1, block=0) # reads 1 entry, else blocks
         now = time.monotonic()
 
         for stream_name, entries in self.streams:

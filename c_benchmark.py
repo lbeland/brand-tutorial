@@ -7,12 +7,12 @@ import json
 import redis
 
 
-def start_graph(args):
+def start_graph(args, results_folder="c_results"):
     """Start the BRAND graph and wait for completion"""
     REDIS_IP = '127.0.0.1'
     REDIS_PORT = 6379
 
-    os.makedirs("results", exist_ok=True)
+    os.makedirs(results_folder, exist_ok=True)
 
     # Define graph structure directly in Python
     graph = {
@@ -28,7 +28,7 @@ def start_graph(args):
                     'n_messages': args.n_messages,
                     'msg_size': args.msg_size,
                     'num_channels': args.num_channels,
-                    'output_file': f"../results/{args.msg_size}_{args.num_channels}_send_times.csv"
+                    'output_file': f"../{results_folder}/{args.msg_size}_{args.num_channels}_Producer.csv"
                 }
             },
             {
@@ -38,7 +38,7 @@ def start_graph(args):
                 'parameters': {
                     'log': 'INFO',
                     'n_messages': args.n_messages,
-                    'output_file': f"../results/{args.msg_size}_{args.num_channels}_recv_times.csv"
+                    'output_file': f"../{results_folder}/{args.msg_size}_{args.num_channels}_Consumer.csv"
                 }
             }
         ]
@@ -85,14 +85,15 @@ def start_graph(args):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--n_messages", type=int, default=1000)
-    parser.add_argument("--msg_size", type=int, default=100)
-    parser.add_argument("--num_channels", type=int, default=10)
-    parser.add_argument("--output_file", type=str, default="send_times.csv")
+    parser.add_argument("--msg_size", type=int, default=1)
+    parser.add_argument("--num_channels", type=int, default=1)
+    parser.add_argument("--output_file", type=str, default="Producer.csv")
     args = parser.parse_args()
 
-    os.makedirs("results", exist_ok=True)
+    results_folder = "c_results"
+    os.makedirs(results_folder, exist_ok=True)
 
-    # if os.path.exists(f"results/{args.msg_size}_{args.num_channels}_send_times.csv"):
+    # if os.path.exists(f"{results_folder}/{args.msg_size}_{args.num_channels}_send_times.csv"):
     #     return
     
     # Set up environment with venv binaries in PATH
@@ -118,7 +119,7 @@ def main():
     
     try:
         # 2. Start the graph and wait for completion
-        start_graph(args)
+        start_graph(args, results_folder=results_folder)
 
     except KeyboardInterrupt:
         print("Interrupted by user")

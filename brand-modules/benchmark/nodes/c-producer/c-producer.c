@@ -153,7 +153,6 @@ void terminate(producer_parameters_t *producer_params) {
                     fprintf(outfile, "std,%.6f\n", stddev_us);
                     fprintf(outfile, "max,%.6f\n", max_us);
                     fclose(outfile);
-                    printf("Results saved to: %s\n", producer_params->output_file);
                 } else {
                     printf("Error: Could not open output file: %s\n", producer_params->output_file);
                 }
@@ -172,9 +171,7 @@ void terminate(producer_parameters_t *producer_params) {
 }
 
 void initialize_signals() {
-    printf("[%s] Attempting to initialize signal handlers.\n", NICKNAME);
     signal(SIGINT, &handler_SIGINT);
-    printf("[%s] Signal handlers installed.\n", NICKNAME);
 }
 
 void initialize_parameters(producer_parameters_t *p, redisContext *c) {
@@ -192,12 +189,6 @@ void initialize_parameters(producer_parameters_t *p, redisContext *c) {
     p->num_channels = get_parameter_int(supergraph_json, NICKNAME, "num_channels");
     strcpy(p->output_file, get_parameter_string(supergraph_json, NICKNAME, "output_file"));
     
-    printf("[%s] Parameters have been loaded.\n", NICKNAME);
-    printf("[%s] n_messages: %d\n", NICKNAME, p->n_messages);
-    printf("[%s] msg_size: %d\n", NICKNAME, p->msg_size);
-    printf("[%s] num_channels: %d\n", NICKNAME, p->num_channels);
-    printf("[%s] output_file: %s\n", NICKNAME, p->output_file);
-    
     if (p->n_messages <= 0) {
         emit_status(c, NICKNAME, NODE_FATAL_ERROR, "Invalid parameters: n_messages must be positive");
         redisFree(c);
@@ -206,7 +197,6 @@ void initialize_parameters(producer_parameters_t *p, redisContext *c) {
 }
 
 int main(int argc, char **argv) {
-    printf("[%s] Parsing command line args...\n", NICKNAME);
     
     // Parse command line args and init redis
     redis_context = parse_command_line_args_init_redis(argc, argv, NICKNAME);

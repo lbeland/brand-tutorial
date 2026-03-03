@@ -42,101 +42,99 @@ double get_current_time() {
     return ts.tv_sec + ts.tv_nsec / 1e9;
 }
 
+// Helper: Extract send_time from a Redis entry
+static int extract_send_time_from_entry(redisReply *entry, double *send_time) {
+    if (entry->elements < 2) return 0;
+    
+    redisReply *entry_dict = entry->element[1];
+    if (entry_dict->type != REDIS_REPLY_ARRAY) return 0;
+    
+    // Find the 'time' field
+    for (size_t j = 0; j < entry_dict->elements; j += 2) {
+        if (entry_dict->element[j]->type == REDIS_REPLY_STRING &&
+            strcmp(entry_dict->element[j]->str, "time") == 0) {
+            
+            if (j + 1 < entry_dict->elements &&
+                entry_dict->element[j + 1]->type == REDIS_REPLY_STRING) {
+                
+                const char *time_data = entry_dict->element[j + 1]->str;
+                *send_time = *(double *)time_data;
+                return 1;
+            }
+            break;
+        }
+    }
+    return 0;
+}
+
+// Helper: Read one batch of messages from Redis stream
+static int read_from_redis_stream(char *last_id, double *send_time) {
+    redisReply *xread_reply = (redisReply *)redisCommand(redis_context, 
+        "XREAD COUNT 1 BLOCK 0 STREAMS random %s", last_id);
+    
+    if (xread_reply == NULL) return 0;
+    
+    int success = 0;
+    if (xread_reply->type == REDIS_REPLY_ARRAY && xread_reply->elements > 0) {
+        redisReply *stream_data = xread_reply->element[0];
+        if (stream_data->elements >= 2) {
+            redisReply *entries = stream_data->element[1];
+            if (entries->elements > 0) {
+                redisReply *entry = entries->element[0];
+                
+                // Update last_id
+                if (entry->elements >= 1 && entry->element[0]->type == REDIS_REPLY_STRING) {
+                    strcpy(last_id, entry->element[0]->str);
+                }
+                
+                // Extract send time
+                success = extract_send_time_from_entry(entry, send_time);
+            }
+        }
+    }
+    
+    freeReplyObject(xread_reply);
+    return success;
+}
+
 // Main consume loop
 void consume_messages(graph_parameters_t *graph_parameters) {
     char last_id[50] = "0-0";
     int n_messages = graph_parameters->n_messages;
-    int warmup_counter = 0;
-    
-    // Warmup phase: receive 500 samples before measurements
-    while (warmup_counter < 500 && !flag_SIGINT) {
-        // Read from Redis stream
-        redisReply *xread_reply = (redisReply *)redisCommand(redis_context, 
-            "XREAD COUNT 1 BLOCK 0 STREAMS random %s", last_id);
-        
-        if (xread_reply != NULL) {
-            if (xread_reply->type == REDIS_REPLY_ARRAY && xread_reply->elements > 0) {
-                redisReply *stream_data = xread_reply->element[0];
-                if (stream_data->elements >= 2) {
-                    redisReply *entries = stream_data->element[1];
-                    
-                    for (size_t i = 0; i < entries->elements; i++) {
-                        redisReply *entry = entries->element[i];
-                        
-                        if (entry->elements >= 2) {
-                            // Get entry ID
-                            redisReply *entry_id = entry->element[0];
-                            if (entry_id->type == REDIS_REPLY_STRING) {
-                                strcpy(last_id, entry_id->str);
-                            }
-                            warmup_counter++;
-                        }
-                    }
-                }
-            }
-            freeReplyObject(xread_reply);
+    const int WARMUP_SAMPLES = 500;
+    int warmup_count = 0;
+
+    // Warmup phase
+    while (warmup_count < WARMUP_SAMPLES && !flag_SIGINT) {
+        double send_time = 0.0;
+
+        if (!read_from_redis_stream(last_id, &send_time)) {
+            continue;  // No message received, try again
         }
+
+        warmup_count++;
     }
-    
+
     // Measurement phase
+    g_counter = 0;
     while (g_counter < n_messages && !flag_SIGINT) {
-        double now = get_current_time();
-        
-        // Read from Redis stream
-        redisReply *xread_reply = (redisReply *)redisCommand(redis_context, 
-            "XREAD COUNT 1 BLOCK 0 STREAMS random %s", last_id);
-        
-        if (xread_reply != NULL) {
-            if (xread_reply->type == REDIS_REPLY_ARRAY && xread_reply->elements > 0) {
-                redisReply *stream_data = xread_reply->element[0];
-                if (stream_data->elements >= 2) {
-                    redisReply *entries = stream_data->element[1];
-                    
-                    for (size_t i = 0; i < entries->elements; i++) {
-                        redisReply *entry = entries->element[i];
-                        
-                        if (entry->elements >= 2) {
-                            // Get entry ID
-                            redisReply *entry_id = entry->element[0];
-                            if (entry_id->type == REDIS_REPLY_STRING) {
-                                strcpy(last_id, entry_id->str);
-                            }
-                            
-                            // Get entry data
-                            redisReply *entry_dict = entry->element[1];
-                            if (entry_dict->type == REDIS_REPLY_ARRAY) {
-                                // Find the 'time' field
-                                for (size_t j = 0; j < entry_dict->elements; j += 2) {
-                                    if (entry_dict->element[j]->type == REDIS_REPLY_STRING &&
-                                        strcmp(entry_dict->element[j]->str, "time") == 0) {
-                                        
-                                        if (j + 1 < entry_dict->elements &&
-                                            entry_dict->element[j + 1]->type == REDIS_REPLY_STRING) {
-                                            
-                                            // Extract time from the bytes (first double)
-                                            const char *time_data = entry_dict->element[j + 1]->str;
-                                            double send_time = *(double *)time_data;
-                                            
-                                            if (g_counter == 0) {
-                                                first_timestamp = send_time;
-                                            }
-                                            
-                                            if (g_counter < MAX_MESSAGES) {
-                                                messages[g_counter].recv_time = now;
-                                                messages[g_counter].latency = now - send_time;
-                                            }
-                                        }
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            freeReplyObject(xread_reply);
+        double send_time = 0.0;
+
+        if (!read_from_redis_stream(last_id, &send_time)) {
+            continue;  // No message received, try again
         }
-        
+
+        double now = get_current_time();
+
+        if (g_counter == 0) {
+            first_timestamp = send_time;
+        }
+
+        if (g_counter < MAX_MESSAGES) {
+            messages[g_counter].recv_time = now;
+            messages[g_counter].latency = now - send_time;
+        }
+
         g_counter++;
     }
 }
@@ -205,12 +203,11 @@ void terminate(graph_parameters_t *graph_parameters) {
         if (strlen(graph_parameters->output_file) > 0) {
             FILE *outfile = fopen(graph_parameters->output_file, "w");
             if (outfile != NULL) {
-                fprintf(outfile, "Metric,Recv_period, Latency, Throughput\n");
-                fprintf(outfile, "mean,%.6f, %.6f, %.6f\n", avg_period_us, avg_latency_us, throughput);
-                fprintf(outfile, "std,%.6f, %.6f, \n", stddev_period_us, stddev_latency_us);
-                fprintf(outfile, "max,%.6f, %.6f, \n", max_period_us, max_latency_us);
+                fprintf(outfile, "Metric,Recv_period,Latency,Throughput\n");
+                fprintf(outfile, "mean,%.6f,%.6f,%.6f\n", avg_period_us, avg_latency_us, throughput);
+                fprintf(outfile, "std,%.6f,%.6f, \n", stddev_period_us, stddev_latency_us);
+                fprintf(outfile, "max,%.6f,%.6f, \n", max_period_us, max_latency_us);
                 fclose(outfile);
-                printf("Results saved to: %s\n", graph_parameters->output_file);
             } else {
                 printf("Error: Could not open output file: %s\n", graph_parameters->output_file);
             }
@@ -228,9 +225,7 @@ void terminate(graph_parameters_t *graph_parameters) {
 }
 
 void initialize_signals() {
-    printf("[%s] Attempting to initialize signal handlers.\n", NICKNAME);
     signal(SIGINT, &handler_SIGINT);
-    printf("[%s] Signal handlers installed.\n", NICKNAME);
 }
 
 void handler_SIGINT(int exitStatus) {
@@ -248,10 +243,6 @@ void initialize_parameters(graph_parameters_t *p, redisContext *c) {
 
     p->n_messages = get_parameter_int(supergraph_json, NICKNAME, "n_messages");
     strcpy(p->output_file, get_parameter_string(supergraph_json, NICKNAME, "output_file"));
-    
-    printf("[%s] Parameters have been loaded.\n", NICKNAME);
-    printf("[%s] n_messages: %d\n", NICKNAME, p->n_messages);
-    printf("[%s] output_file: %s\n", NICKNAME, p->output_file);
 }
 
 // void shutdown_process() {
@@ -261,7 +252,6 @@ void initialize_parameters(graph_parameters_t *p, redisContext *c) {
 // }
 
 int main(int argc, char *argv[]) {
-    printf("[%s] Parsing command line args...\n", NICKNAME);
     
     redis_context = parse_command_line_args_init_redis(argc, argv, NICKNAME);
     
