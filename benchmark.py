@@ -26,7 +26,7 @@ def start_graph(args):
                     'n_messages': args.n_messages,
                     'msg_size': args.msg_size,
                     'num_channels': args.num_channels,
-                    'output_file': f"../results/{args.msg_size}_{args.num_channels}_send_times.csv"
+                    'output_file': f"../results/{args.msg_size}_{args.num_channels}_Producer.csv"
                 }
             },
             {
@@ -36,7 +36,7 @@ def start_graph(args):
                 'parameters': {
                     'log': 'INFO',
                     'n_messages': args.n_messages,
-                    'output_file': f"../results/{args.msg_size}_{args.num_channels}_recv_times.csv"
+                    'output_file': f"../results/{args.msg_size}_{args.num_channels}_Consumer.csv"
                 }
             }
         ]
@@ -91,7 +91,7 @@ def main():
 
     os.makedirs("results", exist_ok=True)
 
-    # if os.path.exists(f"results/{args.msg_size}_{args.num_channels}_send_times.csv"):
+    # if os.path.exists(f"results/{args.msg_size}_{args.num_channels}_Producer.csv"):
     #     return  # Skip if already exists
     
     # Set up environment with venv binaries in PATH
