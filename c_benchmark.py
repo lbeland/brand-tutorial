@@ -87,15 +87,16 @@ def main():
     parser.add_argument("--n_messages", type=int, default=1000)
     parser.add_argument("--msg_size", type=int, default=1)
     parser.add_argument("--num_channels", type=int, default=1)
-    parser.add_argument("--max_buffer_size", type=int, default=10)
+    parser.add_argument("--max_buffer_size", type=int, default=100)
+    parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--output_file", type=str, default="Producer.csv")
     args = parser.parse_args()
 
     results_folder = "c_results"
     os.makedirs(results_folder, exist_ok=True)
 
-    # if os.path.exists(f"{results_folder}/{args.msg_size}_{args.num_channels}_send_times.csv"):
-    #     return
+    if os.path.exists(f"{results_folder}/{args.msg_size}_{args.num_channels}_Consumer.csv") and not args.overwrite:
+        return
     
     # Set up environment with venv binaries in PATH
     env = os.environ.copy()
