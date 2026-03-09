@@ -20,14 +20,8 @@ typedef struct {
     char output_file[MAX_OUTPUT_FILE];
 } producer_parameters_t;
 
-typedef struct {
-    double send_time;
-} send_stats_t;
-
 // Global variables for signal handling
 redisContext *redis_context = NULL;
-send_stats_t send_times[MAX_MESSAGES];
-int g_counter = 0;
 volatile int flag_SIGINT = 0;
 
 char NICKNAME[20] = "C-producer";
@@ -70,10 +64,15 @@ void wait_for_buffer_slot(int max_buffer_size) {
 void produce_messages(producer_parameters_t *params) {
     int message_size = params->num_channels * params->msg_size * sizeof(double);
     double *message_data = (double *)malloc(message_size);
-    
     if (!message_data) {
         fprintf(stderr, "[%s] Memory allocation failed\n", NICKNAME);
         return;
+    }
+
+    send_times = (double *)malloc(params->n_messages * sizeof(double));
+    if (!send_times) {
+        fprintf(stderr, "Memory allocation failed\n");
+        return 1;
     }
     
     // Fill with default data (ones)
@@ -124,10 +123,7 @@ void produce_messages(producer_parameters_t *params) {
             break;
         }
         
-        if (g_counter < MAX_MESSAGES) {
-            send_times[g_counter].send_time = now;
-        }
-        g_counter++;
+        send_times[i] = now;
     }
     
     free(message_data);
@@ -135,52 +131,46 @@ void produce_messages(producer_parameters_t *params) {
 
 // Save results to file and print statistics
 void terminate(producer_parameters_t *producer_params) {
-    printf("Total messages sent: %d\n", g_counter);
+    printf("Total messages sent: %d\n", producer_params->n_messages);
     
     // Calculate statistics
-    if (g_counter > 1) {
-        double sum = 0.0, max_val = 0.0, sum_sq = 0.0;
-        int max_idx = 0;
-        int count = 0;
-        
-        for (int i = 1; i < g_counter; i++) {
-            double period = send_times[i].send_time - send_times[i-1].send_time;
-            sum += period;
-            sum_sq += period * period;
-            if (period > max_val) {
-                max_val = period;
-                max_idx = i;
-            }
-            count++;
+    double sum = 0.0, max_val = 0.0, sum_sq = 0.0;
+    int max_idx = 0;
+    
+    for (int i = 1; i < producer_params->n_messages; i++) {
+        double period = send_times[i] - send_times[i-1];
+        sum += period;
+        sum_sq += period * period;
+        if (period > max_val) {
+            max_val = period;
+            max_idx = i;
         }
-        
-        if (count > 0) {
-            double mean_sec = sum / count;
-            double variance = (sum_sq / count) - (mean_sec * mean_sec);
-            double stddev_sec = sqrt(variance < 0 ? 0 : variance);
-            
-            // Convert to microseconds
-            double mean_us = mean_sec * 1e6;
-            double stddev_us = stddev_sec * 1e6;
-            double max_us = max_val * 1e6;
-            
-            printf("Average send period (us): %.4f\n", mean_us);
-            printf("Max send period (us): %.4f, idx: %d\n", max_us, max_idx);
-            printf("Std send period (us): %.4f\n", stddev_us);
-            
-            // Save results to CSV file in same format as zeromq
-            if (strlen(producer_params->output_file) > 0) {
-                FILE *outfile = fopen(producer_params->output_file, "w");
-                if (outfile != NULL) {
-                    fprintf(outfile, "Metric,Send_period\n");
-                    fprintf(outfile, "mean,%.6f\n", mean_us);
-                    fprintf(outfile, "std,%.6f\n", stddev_us);
-                    fprintf(outfile, "max,%.6f\n", max_us);
-                    fclose(outfile);
-                } else {
-                    printf("Error: Could not open output file: %s\n", producer_params->output_file);
-                }
-            }
+    }
+    
+    double mean_sec = sum / count;
+    double variance = (sum_sq / count) - (mean_sec * mean_sec);
+    double stddev_sec = sqrt(variance < 0 ? 0 : variance);
+    
+    // Convert to microseconds
+    double mean_us = mean_sec * 1e6;
+    double stddev_us = stddev_sec * 1e6;
+    double max_us = max_val * 1e6;
+    
+    printf("Average send period (us): %.4f\n", mean_us);
+    printf("Max send period (us): %.4f, idx: %d\n", max_us, max_idx);
+    printf("Std send period (us): %.4f\n", stddev_us);
+    
+    // Save results to CSV file in same format as zeromq
+    if (strlen(producer_params->output_file) > 0) {
+        FILE *outfile = fopen(producer_params->output_file, "w");
+        if (outfile != NULL) {
+            fprintf(outfile, "Metric,Send_period\n");
+            fprintf(outfile, "mean,%.6f\n", mean_us);
+            fprintf(outfile, "std,%.6f\n", stddev_us);
+            fprintf(outfile, "max,%.6f\n", max_us);
+            fclose(outfile);
+        } else {
+            printf("Error: Could not open output file: %s\n", producer_params->output_file);
         }
     }
     

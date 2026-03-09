@@ -13,17 +13,12 @@ typedef struct graph_parameters_t {
     char output_file[100];
 } graph_parameters_t;
 
-#define MAX_MESSAGES 10000
-
-typedef struct {
-    double recv_time;
-    double latency;
-} message_data_t;
 
 int g_counter = 0;
 int flag_SIGINT = 0;
 
-message_data_t messages[MAX_MESSAGES];
+double *recv_times = NULL;
+double *process_times = NULL;
 double first_timestamp = 0.0;
 
 void initialize_signals();
@@ -103,6 +98,8 @@ void consume_messages(graph_parameters_t *graph_parameters) {
     char last_id[50] = "0-0";
     char entry_id[50] = "0-0";
     int n_messages = graph_parameters->n_messages;
+    recv_times = (double *)malloc(n_messages * sizeof(double));
+    process_times = (double *)malloc(n_messages * sizeof(double));
     const int WARMUP_SAMPLES = 500;
     int warmup_count = 0;
 
@@ -111,7 +108,7 @@ void consume_messages(graph_parameters_t *graph_parameters) {
         double send_time = 0.0;
 
         if (!read_from_redis_stream(last_id, entry_id, &send_time)) {
-            continue;  // No message received, try again
+            break;  // Something is off
         }
 
         redisReply *xdel_reply = (redisReply *)redisCommand(redis_context, "XDEL random %s", entry_id);
@@ -128,7 +125,7 @@ void consume_messages(graph_parameters_t *graph_parameters) {
         double send_time = 0.0;
 
         if (!read_from_redis_stream(last_id, entry_id, &send_time)) {
-            continue;  // No message received, try again
+            break;  // Something is off
         }
 
         double now = get_current_time();
@@ -137,10 +134,8 @@ void consume_messages(graph_parameters_t *graph_parameters) {
             first_timestamp = send_time;
         }
 
-        if (g_counter < MAX_MESSAGES) {
-            messages[g_counter].recv_time = now;
-            messages[g_counter].latency = now - send_time;
-        }
+        recv_times[g_counter] = now;
+        process_times[g_counter] = now - send_time;
 
         redisReply *xdel_reply = (redisReply *)redisCommand(redis_context, "XDEL random %s", entry_id);
         if (xdel_reply != NULL) {
@@ -162,7 +157,7 @@ void terminate(graph_parameters_t *graph_parameters) {
         int count = 0;
         
         for (int i = 1; i < g_counter; i++) {
-            double period = messages[i].recv_time - messages[i-1].recv_time;
+            double period = recv_times[i] - recv_times[i-1];
             sum_diff += period;
             sum_sq_diff += period * period;
             if (period > max_diff) {
@@ -190,10 +185,10 @@ void terminate(graph_parameters_t *graph_parameters) {
         int max_latency_idx = 0;
         
         for (int i = 0; i < g_counter; i++) {
-            sum_latency += messages[i].latency;
-            sum_sq_latency += messages[i].latency * messages[i].latency;
-            if (messages[i].latency > max_latency) {
-                max_latency = messages[i].latency;
+            sum_latency += process_times[i];
+            sum_sq_latency += process_times[i] * process_times[i];
+            if (process_times[i] > max_latency) {
+                max_latency = process_times[i];
                 max_latency_idx = i;
             }
         }
@@ -208,7 +203,7 @@ void terminate(graph_parameters_t *graph_parameters) {
         double max_latency_us = max_latency * 1e6;
         
         // Calculate throughput
-        double throughput = g_counter / (messages[g_counter-1].recv_time - first_timestamp) / 1e3;
+        double throughput = g_counter / (recv_times[g_counter-1] - first_timestamp) / 1e3;
         printf("Throughput (msg/ms): %.2f\n", throughput);
         
         // Save results to CSV file in same format as zeromq
