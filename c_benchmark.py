@@ -107,23 +107,16 @@ def main():
     env['PATH'] = f"/home/linda/brand-tutorial/brand/bin:{env.get('PATH', '')}"
     
     # 1. Start supervisor with venv activated
-    supervisor_cmd = """
-    source rt/bin/activate && \
-    cd brand && \
-    python3 supervisor/supervisor.py
-    """
-    
     supervisor = subprocess.Popen(
-        supervisor_cmd,
-        shell=True,
-        executable="/bin/bash",
+        ["/home/linda/Documents/Benchmark_IPC/brand-tutorial/rt/bin/python3", "supervisor/supervisor.py"],
+        cwd="/home/linda/Documents/Benchmark_IPC/brand-tutorial/brand",
         env=env,
+        preexec_fn=os.setsid,
     )
 
-    # Give supervisor time to start Redis and initialize
-    time.sleep(2)
-    
     try:
+        # Give supervisor time to start Redis and initialize
+        time.sleep(2)
         # 2. Start the graph and wait for completion
         start_graph(args, results_folder=results_folder)
 
@@ -138,12 +131,10 @@ def main():
 
 def terminate(proc):
     try:
-        os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+        os.killpg(os.getpgid(proc.pid), signal.SIGINT)
         proc.wait(timeout=5)
     except subprocess.TimeoutExpired:
-        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-    except Exception:
-        pass
+        os.killpg(os.getpgid(proc.pid), signal.SIGINT)
 
 
 if __name__ == "__main__":
