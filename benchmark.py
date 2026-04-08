@@ -21,6 +21,7 @@ def start_graph(args, results_folder="results"):
                 'nickname': 'node_1',
                 'module': '../brand-modules/benchmark',
                 'redis-inputs': [],
+                'run_priority': 99,
                 'parameters': {
                     'log': 'INFO',
                     'n_messages': args.n_messages,
@@ -34,6 +35,7 @@ def start_graph(args, results_folder="results"):
                 'name': 'consumer',
                 'nickname': 'node_2',
                 'module': '../brand-modules/benchmark',
+                'run_priority': 99,
                 'parameters': {
                     'log': 'INFO',
                     'n_messages': args.n_messages,
@@ -91,7 +93,7 @@ def main():
     parser.add_argument("--output_file", type=str, default="send_times.csv")
     args = parser.parse_args()
 
-    results_folder = "results"
+    results_folder = "rt_results"
 
     os.makedirs(results_folder, exist_ok=True)
 
