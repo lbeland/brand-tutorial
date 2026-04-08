@@ -102,10 +102,12 @@ void consume_messages(graph_parameters_t *graph_parameters) {
     process_times = (double *)malloc(n_messages * sizeof(double));
     const int WARMUP_SAMPLES = 500;
     int warmup_count = 0;
+    double send_time = 0.0;
+    double now = 0.0;
 
     // Warmup phase
     while (warmup_count < WARMUP_SAMPLES && !flag_SIGINT) {
-        double send_time = 0.0;
+        
 
         if (!read_from_redis_stream(last_id, entry_id, &send_time)) {
             break;  // Something is off
@@ -122,13 +124,12 @@ void consume_messages(graph_parameters_t *graph_parameters) {
     // Measurement phase
     g_counter = 0;
     while (g_counter < n_messages && !flag_SIGINT) {
-        double send_time = 0.0;
 
         if (!read_from_redis_stream(last_id, entry_id, &send_time)) {
             break;  // Something is off
         }
 
-        double now = get_current_time();
+        now = get_current_time();
 
         if (g_counter == 0) {
             first_timestamp = send_time;
@@ -201,6 +202,10 @@ void terminate(graph_parameters_t *graph_parameters) {
         double avg_latency_us = avg_latency_sec * 1e6;
         double stddev_latency_us = stddev_latency_sec * 1e6;
         double max_latency_us = max_latency * 1e6;
+
+        printf("Average latency (us): %.6f\n", avg_latency_us);
+        printf("Std latency (us): %.6f\n", stddev_latency_us);
+        printf("Max latency (us): %.6f, idx: %d\n", max_latency_us, max_latency_idx);
         
         // Calculate throughput
         double throughput = g_counter / (recv_times[g_counter-1] - first_timestamp) / 1e3;

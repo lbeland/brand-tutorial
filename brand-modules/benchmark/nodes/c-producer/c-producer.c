@@ -23,6 +23,7 @@ typedef struct {
 // Global variables for signal handling
 redisContext *redis_context = NULL;
 volatile int flag_SIGINT = 0;
+double *send_times = NULL;
 
 char NICKNAME[20] = "C-producer";
 redisReply *reply = NULL;
@@ -72,7 +73,7 @@ void produce_messages(producer_parameters_t *params) {
     send_times = (double *)malloc(params->n_messages * sizeof(double));
     if (!send_times) {
         fprintf(stderr, "Memory allocation failed\n");
-        return 1;
+        return;
     }
     
     // Fill with default data (ones)
@@ -103,9 +104,10 @@ void produce_messages(producer_parameters_t *params) {
     }
     
     // Send measured messages
+    double now = 0.0;
     for (int i = 0; i < params->n_messages && !flag_SIGINT; i++) {
         wait_for_buffer_slot(params->max_buffer_size);
-        double now = get_current_time();
+        now = get_current_time();
         // Fill message with current timestamp
         for (int j = 0; j < params->num_channels * params->msg_size; j++) {
             message_data[j] = now;
@@ -147,8 +149,8 @@ void terminate(producer_parameters_t *producer_params) {
         }
     }
     
-    double mean_sec = sum / count;
-    double variance = (sum_sq / count) - (mean_sec * mean_sec);
+    double mean_sec = sum / producer_params->n_messages;
+    double variance = (sum_sq / producer_params->n_messages) - (mean_sec * mean_sec);
     double stddev_sec = sqrt(variance < 0 ? 0 : variance);
     
     // Convert to microseconds
