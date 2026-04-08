@@ -22,6 +22,7 @@ def start_graph(args, results_folder="results"):
                 'module': '../brand-modules/benchmark',
                 'redis-inputs': [],
                 'run_priority': 99,
+                'cpu_affinity': 5,
                 'parameters': {
                     'log': 'INFO',
                     'n_messages': args.n_messages,
@@ -36,6 +37,7 @@ def start_graph(args, results_folder="results"):
                 'nickname': 'node_2',
                 'module': '../brand-modules/benchmark',
                 'run_priority': 99,
+                'cpu_affinity': 6,
                 'parameters': {
                     'log': 'INFO',
                     'n_messages': args.n_messages,

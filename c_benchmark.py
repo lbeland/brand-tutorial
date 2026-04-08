@@ -23,6 +23,8 @@ def start_graph(args, results_folder="c_results"):
                 'nickname': 'node_1',
                 'module': '../brand-modules/benchmark',
                 'redis-inputs': [],
+                'run_priority': 99,
+                'cpu_affinity': 5,
                 'parameters': {
                     'log': 'INFO',
                     'n_messages': args.n_messages,
@@ -36,6 +38,8 @@ def start_graph(args, results_folder="c_results"):
                 'name': 'c-consumer',
                 'nickname': 'node_2',
                 'module': '../brand-modules/benchmark',
+                'run_priority': 99,
+                'cpu_affinity': 6,
                 'parameters': {
                     'log': 'INFO',
                     'n_messages': args.n_messages,
@@ -84,7 +88,7 @@ def start_graph(args, results_folder="c_results"):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--n_messages", type=int, default=1000)
+    parser.add_argument("--n_messages", type=int, default=100000)
     parser.add_argument("--msg_size", type=int, default=1)
     parser.add_argument("--num_channels", type=int, default=1)
     parser.add_argument("--max_buffer_size", type=int, default=100)
@@ -92,7 +96,7 @@ def main():
     parser.add_argument("--output_file", type=str, default="Producer.csv")
     args = parser.parse_args()
 
-    results_folder = "c_results"
+    results_folder = "rt_c_results"
     os.makedirs(results_folder, exist_ok=True)
 
     if os.path.exists(f"{results_folder}/{args.msg_size}_{args.num_channels}_Consumer.csv") and not args.overwrite:
