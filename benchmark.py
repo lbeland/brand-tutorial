@@ -5,7 +5,9 @@ import signal
 import argparse
 import json
 import redis
+from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parent
 
 def start_graph(args, results_folder="results"):
     """Start the BRAND graph and wait for completion"""
@@ -29,7 +31,7 @@ def start_graph(args, results_folder="results"):
                     'msg_size': args.msg_size,
                     'num_channels': args.num_channels,
                     'max_buffer_size': args.max_buffer_size,
-                    'output_file': f"../{results_folder}/{args.msg_size}_{args.num_channels}_Producer.csv"
+                    'output_file': f"{results_folder}/{args.msg_size}_{args.num_channels}_Producer.csv"
                 }
             },
             {
@@ -41,7 +43,7 @@ def start_graph(args, results_folder="results"):
                 'parameters': {
                     'log': 'INFO',
                     'n_messages': args.n_messages,
-                    'output_file': f"../{results_folder}/{args.msg_size}_{args.num_channels}_Consumer.csv"
+                    'output_file': f"{results_folder}/{args.msg_size}_{args.num_channels}_Consumer.csv"
                 }
             }
         ]
@@ -95,7 +97,7 @@ def main():
     parser.add_argument("--output_file", type=str, default="send_times.csv")
     args = parser.parse_args()
 
-    results_folder = "rt_results"
+    results_folder = f"{REPO_ROOT}/rt_results"
 
     os.makedirs(results_folder, exist_ok=True)
 
@@ -104,12 +106,12 @@ def main():
     
     # Set up environment with venv binaries in PATH
     env = os.environ.copy()
-    env['PATH'] = f"/home/linda/Documents/Benchmark_IPC/brand-tutorial/brand/bin:{env.get('PATH', '')}"
+    env['PATH'] = f"{REPO_ROOT}/brand/bin:{env.get('PATH', '')}"
     
     # 1. Start supervisor with venv activated
     supervisor = subprocess.Popen(
-        ["/home/linda/Documents/Benchmark_IPC/brand-tutorial/rt/bin/python3", "supervisor/supervisor.py"],
-        cwd="/home/linda/Documents/Benchmark_IPC/brand-tutorial/brand",
+        [f"{REPO_ROOT}/rt/bin/python3", "supervisor/supervisor.py"],
+        cwd=f"{REPO_ROOT}/brand",
         env=env,
         preexec_fn=os.setsid,
     )
