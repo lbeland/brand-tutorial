@@ -104,9 +104,21 @@ def main():
     if os.path.exists(f"{results_folder}/{args.msg_size}_{args.num_channels}_Producer.csv") and not args.overwrite:
         return  # Skip if already exists
     
-    # Set up environment with venv binaries in PATH
+    # Force BRAND rt env for all spawned processes, independent of shell activation.
     env = os.environ.copy()
-    env['PATH'] = f"{REPO_ROOT}/brand/bin:{env.get('PATH', '')}"
+    rt_root = f"{REPO_ROOT}/rt"
+    rt_site_packages = f"{rt_root}/lib/python3.8/site-packages"
+    rt_site_packages64 = f"{rt_root}/lib64/python3.8/site-packages"
+
+    env['VIRTUAL_ENV'] = rt_root
+    env['PATH'] = f"{rt_root}/bin:{REPO_ROOT}/brand/bin:{env.get('PATH', '')}"
+
+    pythonpath_entries = [
+        rt_site_packages,
+        rt_site_packages64,
+        env.get('PYTHONPATH', ''),
+    ]
+    env['PYTHONPATH'] = ':'.join([p for p in pythonpath_entries if p])
     
     # 1. Start supervisor with venv activated
     supervisor = subprocess.Popen(
