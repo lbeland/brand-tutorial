@@ -64,25 +64,29 @@ def start_graph(args, results_folder="c_results"):
 
     # Wait for both producer and consumer to signal completion
     print('Waiting for test to complete...')
-    # Calculate timeout based on expected runtime
-    expected_runtime = 10
     
     last_id = '0-0'
     consumer_done = False
     
     while not consumer_done:
         # Check for completion signals from both nodes
-        messages = r.xread({'test_completion': last_id}, count=1, block=int(expected_runtime * 1000))
+        messages = r.xread({'test_completion': last_id}, count=1, block=5*1000)
         if messages:
             for stream_name, entries in messages:
                 for entry_id, entry_dict in entries:
                     if entry_dict.get(b'consumer') == b'done':
                         consumer_done = True
+                        break
                     last_id = entry_id
+                else:
+                    continue
+                break
+            else:
+                continue
+            break
         else:
             # Timeout - no message received
-            print("Timeout waiting for completion")
-            break
+            print("Waiting for completion")
     
     if consumer_done:
         print("Test completed successfully")

@@ -33,6 +33,8 @@ void handler_SIGINT(int sig) {
     flag_SIGINT++;
 }
 
+int g_counter = 0;
+
 // Get current time in seconds (monotonic)
 double get_current_time() {
     struct timespec ts;
@@ -126,6 +128,7 @@ void produce_messages(producer_parameters_t *params) {
         }
         
         send_times[i] = now;
+        g_counter++;
     }
     
     free(message_data);
@@ -133,7 +136,12 @@ void produce_messages(producer_parameters_t *params) {
 
 // Save results to file and print statistics
 void terminate(producer_parameters_t *producer_params) {
-    printf("Total messages sent: %d\n", producer_params->n_messages);
+    printf("Total messages sent: %d\n", g_counter);
+
+    if (g_counter != producer_params->n_messages) {
+        printf("Warning: Expected to send %d messages but sent %d\n", producer_params->n_messages, g_counter);
+        return;
+    }
     
     // Calculate statistics
     double sum = 0.0, max_val = 0.0, sum_sq = 0.0;

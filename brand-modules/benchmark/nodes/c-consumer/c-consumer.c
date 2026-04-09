@@ -151,7 +151,7 @@ void consume_messages(graph_parameters_t *graph_parameters) {
 void terminate(graph_parameters_t *graph_parameters) {
     printf("Total messages processed: %d\n", g_counter);
     
-    if (g_counter > 1) {
+    if (g_counter == graph_parameters->n_messages) {
         // Calculate receive period statistics
         double sum_diff = 0.0, max_diff = 0.0, sum_sq_diff = 0.0;
         int max_idx = 0;
