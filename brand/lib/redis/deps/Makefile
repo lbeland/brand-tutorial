@@ -76,7 +76,7 @@ LUA_LDFLAGS+= $(LDFLAGS)
 ifeq ($(LUA_DEBUG),yes)
 	LUA_CFLAGS+= -O0 -g -DLUA_USE_APICHECK
 else
-	LUA_CFLAGS+= -O2 
+	LUA_CFLAGS+= -O2 -march=native
 endif
 # lua's Makefile defines AR="ar rcu", which is unusual, and makes it more
 # challenging to cross-compile lua (and redis).  These defines make it easier

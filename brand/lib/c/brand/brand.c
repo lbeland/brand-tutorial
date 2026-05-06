@@ -96,7 +96,7 @@ redisContext* parse_command_line_args_init_redis(int argc, char **argv, char* NI
     // Must specify either -s or -i
     else
     {
-        printf("ERROR: Neither -s (Redis socket) or -i (host IP) provided. Exiting node process.", NICKNAME); 
+        printf("ERROR: Neither -s (Redis socket) or -i (host IP) provided. Exiting node process.%s", NICKNAME); 
         exit(1);
     }
 
