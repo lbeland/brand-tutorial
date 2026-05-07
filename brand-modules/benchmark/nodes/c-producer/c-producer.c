@@ -17,6 +17,7 @@ typedef struct {
     int msg_size;
     int num_channels;
     int max_buffer_size;
+    float t_wait;
     char output_file[MAX_OUTPUT_FILE];
 } producer_parameters_t;
 
@@ -108,8 +109,11 @@ void produce_messages(producer_parameters_t *params) {
     // Send measured messages
     double now = 0.0;
     for (int i = 0; i < params->n_messages && !flag_SIGINT; i++) {
-        wait_for_buffer_slot(params->max_buffer_size);
+        if (params->t_wait > 0) {
+            usleep(params->t_wait * 1e6);  // Let Consumer process last message
+        }
         now = get_current_time();
+        wait_for_buffer_slot(params->max_buffer_size);
         // Fill message with current timestamp
         for (int j = 0; j < params->num_channels * params->msg_size; j++) {
             message_data[j] = now;
@@ -212,6 +216,7 @@ void initialize_parameters(producer_parameters_t *p, redisContext *c) {
     p->msg_size = get_parameter_int(supergraph_json, NICKNAME, "msg_size");
     p->num_channels = get_parameter_int(supergraph_json, NICKNAME, "num_channels");
     p->max_buffer_size = get_parameter_int(supergraph_json, NICKNAME, "max_buffer_size");
+    p->t_wait = atof(get_parameter_string(supergraph_json, NICKNAME, "t_wait"));
     strcpy(p->output_file, get_parameter_string(supergraph_json, NICKNAME, "output_file"));
     
     if (p->n_messages <= 0) {

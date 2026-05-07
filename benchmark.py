@@ -31,6 +31,7 @@ def start_graph(args, results_folder="results"):
                     'msg_size': args.msg_size,
                     'num_channels': args.num_channels,
                     'max_buffer_size': args.max_buffer_size,
+                    't_wait': args.t_wait,
                     'output_file': f"{results_folder}/{args.msg_size}_{args.num_channels}_Producer.csv"
                 }
             },
@@ -97,6 +98,7 @@ def main():
     parser.add_argument("--msg_size", type=int, default=100)
     parser.add_argument("--num_channels", type=int, default=10)
     parser.add_argument("--max_buffer_size", type=int, default=10)
+    parser.add_argument("--t_wait", type=float, default=0.0001)
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--output_file", type=str, default="send_times.csv")
     args = parser.parse_args()
