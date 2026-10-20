@@ -1,13 +1,28 @@
 import gc
 import sys
 import os
+import site
 
-# Add virtual environment site-packages to sys.path if VIRTUAL_ENV is set
+# Add virtual environment site-packages to sys.path if VIRTUAL_ENV is set.
+# Two things are needed, in this order, not just a plain sys.path.insert():
+#  1. Insert at the FRONT of sys.path. This binary's default sys.path (from
+#     the linked system libpython3.8) already includes system dist-packages,
+#     which can shadow the venv's pinned versions of packages that also
+#     happen to exist system-wide (e.g. a newer system pytz requiring
+#     zoneinfo, Python 3.9+ stdlib, breaking on this 3.8 venv) if the venv
+#     dir only gets appended at the end.
+#  2. Call site.addsitedir(), not just sys.path.insert(): brand is
+#     pip-installed editable (PEP 660), which relies on a .pth file that
+#     registers a custom import finder — that .pth only gets executed by
+#     site.addsitedir()'s processing, not by merely adding the directory to
+#     sys.path. This binary is a Cython --embed executable, which skips the
+#     interpreter's normal startup site-processing, so it has to be done here.
 if 'VIRTUAL_ENV' in os.environ:
     venv_path = os.environ['VIRTUAL_ENV']
     site_packages = os.path.join(venv_path, 'lib', 'python3.8', 'site-packages')
     if site_packages not in sys.path:
         sys.path.insert(0, site_packages)
+    site.addsitedir(site_packages)
 
 import numpy as np
 import logging

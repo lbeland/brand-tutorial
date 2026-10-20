@@ -10,12 +10,13 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent
 
+# Redis unix domain socket used by the BRAND supervisor and all nodes.
+# Must match the `unixsocket` directive in brand/lib/python/brand/redis.supervisor.conf
+REDIS_SOCKET = '/tmp/redis.sock'
+
 
 def start_graph(args, results_folder="c_results"):
     """Start the BRAND graph and wait for completion"""
-    REDIS_IP = '127.0.0.1'
-    REDIS_PORT = 6379
-
     os.makedirs(results_folder, exist_ok=True)
 
     # Define graph structure directly in Python
@@ -28,7 +29,7 @@ def start_graph(args, results_folder="c_results"):
                 'module': '../brand-modules/benchmark',
                 'redis-inputs': [],
                 'run_priority': 99,
-                'cpu_affinity': 5,
+                'cpu_affinity': 6,
                 'parameters': {
                     'log': 'INFO',
                     'n_messages': args.n_messages,
@@ -44,7 +45,7 @@ def start_graph(args, results_folder="c_results"):
                 'nickname': 'node_2',
                 'module': '../brand-modules/benchmark',
                 'run_priority': 99,
-                'cpu_affinity': 6,
+                'cpu_affinity': 7,
                 'parameters': {
                     'log': 'INFO',
                     'n_messages': args.n_messages,
@@ -54,7 +55,7 @@ def start_graph(args, results_folder="c_results"):
         ]
     }
     
-    r = redis.Redis(host=REDIS_IP, port=REDIS_PORT)
+    r = redis.Redis(unix_socket_path=REDIS_SOCKET)
 
     print(f'Starting graph: {graph["graph_name"]}')
     print(f'Parameters: n_messages={args.n_messages}, msg_size={args.msg_size}, num_channels={args.num_channels}, max_buffer_size={args.max_buffer_size}')
@@ -118,7 +119,8 @@ def main():
     
     # 1. Start supervisor with venv activated
     supervisor = subprocess.Popen(
-        [f"{REPO_ROOT}/rt/bin/python3", "supervisor/supervisor.py"],
+        [f"{REPO_ROOT}/rt/bin/python3", "supervisor/supervisor.py",
+         "-s", REDIS_SOCKET],
         cwd=f"{REPO_ROOT}/brand",
         env=env,
         preexec_fn=os.setsid,

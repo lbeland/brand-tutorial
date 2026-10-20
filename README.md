@@ -1,17 +1,64 @@
-# BRAND Tutorial
+# brand-tutorial — IPC benchmark
 
-This repository contains a brief tutorial on how to get started using BRAND. The tutorial consists of the following steps:
-1. Set up your system for BRAND by following the instructions in [00_setup.md](./notebooks/00_setup.md)
-2. Run a calibration task and train a decoder using [01_calibration.ipynb](./notebooks/01_calibration.ipynb)
-3. Run a closed-loop cursor control task with your trained decoder using [02_control.ipynb](./notebooks/02_control.ipynb)
-4. If you have multiple machines on whicn you can run BRAND, try out the multi-machine version of this task with [03_multi_machine.ipynb](./notebooks/03_multi_machine.ipynb)
+Origin: https://github.com/brandbci/brand-tutorial/tree/main
 
-Once you have finished the above steps, you will have a working example of how to use BRAND to run an experiment.
+[BRAND](https://github.com/brandbci/brand-tutorial) is a BCI framework
+where nodes communicate over Redis streams, orchestrated by a supervisor
+process. Two benchmark variants live under `brand-modules/benchmark/nodes/`:
 
-Next, you may want to:   
-- Learn how graphs are configured (see docs in [brand/README.md](https://github.com/brandbci/brand/blob/main/README.md) and examples in [notebooks/graphs](notebooks/graphs))
-- Write finite-state machine and graphics nodes to fit the task of your choice (see [radialFSM.py](brand-modules/cursor-control/nodes/radialFSM/radialFSM.py) and [display_centerOut.py](brand-modules/cursor-control/nodes/display_centerOut/display_centerOut.py))
-- Try out a new decoder architecture (see [wiener_filter.py](brand-modules/cursor-control/nodes/wiener_filter/wiener_filter.py))
-- Acquire data from a neural recording device like a Blackrock Neurotech Neural Signal Processor (NSP) (see [cerebusAdapter.c](https://github.com/brandbci/brand-nsp/blob/main/nodes/cerebusAdapter/cerebusAdapter.c))
+- `benchmark.py` — starts the supervisor + pure-Python producer/consumer nodes.
+- `c_benchmark.py` — starts the supervisor + C producer/consumer nodes.
 
-If you run into any issues, please document and submit them here on GitHub.
+## Install
+
+From the repo root:
+
+```bash
+./bootstrap.sh --only brand-tutorial --with-builds
+```
+
+This creates `brand-tutorial/rt` (Python 3.8, since upstream BRAND pins
+`numpy==1.18`/`torch==1.12`) and, with `--with-builds`, compiles
+`redis-server`/`redis-cli`, `hiredis`, and the four benchmark nodes via
+`brand/Makefile`. This step is not parallelized (`make -j`) — redis's own
+Makefile doesn't correctly order its `jemalloc` dependency before compiling
+`src/`, so parallel jobs race.
+
+## Run the benchmark
+
+Python variant:
+
+```bash
+cd brand-tutorial
+rt/bin/python3 benchmark.py \
+  --n_messages 1000 \
+  --num_channels 10 \
+  --msg_size 100 \
+  --t_wait 0.0001 \
+  --overwrite
+```
+
+C variant:
+
+```bash
+cd brand-tutorial
+rt/bin/python3 c_benchmark.py \
+  --n_messages 100000 \
+  --num_channels 1 \
+  --msg_size 1 \
+  --t_wait 0.0001 \
+  --overwrite
+```
+
+Both start their own `redis-server` via the BRAND supervisor — no separate
+Redis setup needed.
+
+- `--n_messages`: number of timed messages sent
+- `--num_channels` / `--msg_size`: shape of each message
+- `--t_wait`: seconds the producer sleeps between sends (0 = no wait)
+- `--overwrite`: rerun even if results for this channel/size combination
+  already exist
+
+Python-variant results are written to
+`rt_results/<msg_size>_<num_channels>_{Producer,Consumer}.csv`, C-variant
+results to `rt_c_results/` in the same naming scheme.

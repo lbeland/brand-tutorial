@@ -1,13 +1,28 @@
 import gc
 import sys
 import os
+import site
 
-# Add virtual environment site-packages to sys.path if VIRTUAL_ENV is set
+# Add virtual environment site-packages to sys.path if VIRTUAL_ENV is set.
+# Two things are needed, in this order, not just a plain sys.path.insert():
+#  1. Insert at the FRONT of sys.path. This binary's default sys.path (from
+#     the linked system libpython3.8) already includes system dist-packages,
+#     which can shadow the venv's pinned versions of packages that also
+#     happen to exist system-wide (e.g. a newer system pytz requiring
+#     zoneinfo, Python 3.9+ stdlib, breaking on this 3.8 venv) if the venv
+#     dir only gets appended at the end.
+#  2. Call site.addsitedir(), not just sys.path.insert(): brand is
+#     pip-installed editable (PEP 660), which relies on a .pth file that
+#     registers a custom import finder — that .pth only gets executed by
+#     site.addsitedir()'s processing, not by merely adding the directory to
+#     sys.path. This binary is a Cython --embed executable, which skips the
+#     interpreter's normal startup site-processing, so it has to be done here.
 if 'VIRTUAL_ENV' in os.environ:
     venv_path = os.environ['VIRTUAL_ENV']
     site_packages = os.path.join(venv_path, 'lib', 'python3.8', 'site-packages')
     if site_packages not in sys.path:
         sys.path.insert(0, site_packages)
+    site.addsitedir(site_packages)
 
 import logging
 import numpy as np
@@ -68,6 +83,10 @@ class Consumer(BRANDNode):
         std_latency = np.std(self.process_times)*1e6
         max_latency = np.max(self.process_times)*1e6
 
+        print(f"Average latency (us): {mean_latency:.4f}")
+        print(f"Max latency (us): {max_latency:.4f}, idx: {np.argmax(self.process_times)}")
+        print(f"Std latency (us): {std_latency:.4f}")
+
         throughput = self.n_messages / (self.recv_times[-1] - self.first_timestamp)/1e3
         print(f"Throughput (msg/ms): {self.n_messages}/{(self.recv_times[-1] - self.first_timestamp)*1e3:.4f}ms={throughput:.2f}")
 
@@ -79,6 +98,16 @@ class Consumer(BRANDNode):
         results.to_csv(self.output_file, index=False)
         print("Consumer stopped.")
         
+        # Persist per-packet process_times for post-processing
+        try:
+            base = self.output_file[:-4] if self.output_file.lower().endswith('.csv') else self.output_file
+            proc_path = f"{base}_process_times.csv"
+            with open(proc_path, "w") as f:
+                for v in self.process_times:
+                    f.write(f"{v}\n")
+        except Exception:
+            pass
+
         # Signal completion
         self.r.xadd('test_completion', {'consumer': 'done'})
         self.r.close()

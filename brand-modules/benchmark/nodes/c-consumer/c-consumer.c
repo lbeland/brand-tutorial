@@ -223,6 +223,21 @@ void terminate(graph_parameters_t *graph_parameters) {
             } else {
                 printf("Error: Could not open output file: %s\n", graph_parameters->output_file);
             }
+            // Persist per-packet process_times (strip .csv if present)
+            char base[256];
+            strncpy(base, graph_parameters->output_file, sizeof(base)-1);
+            base[sizeof(base)-1] = '\0';
+            size_t bl = strlen(base);
+            if (bl > 4 && strcmp(base + bl - 4, ".csv") == 0) base[bl - 4] = '\0';
+            char procfile[300];
+            snprintf(procfile, sizeof(procfile), "%s_process_times.csv", base);
+            FILE *pf = fopen(procfile, "w");
+            if (pf) {
+                for (int i = 0; i < g_counter; i++) {
+                    fprintf(pf, "%.17f\n", process_times[i]);
+                }
+                fclose(pf);
+            }
         }
     }
     
